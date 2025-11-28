@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eidolon Protocol - Enhanced AI Music Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                        'bg-light': '#FFFFFF',
+                        'bg-dark': '#181818',
+                        'neon-cyan': '#00FFFF',
+                        'neon-pink': '#FF1493',
+                        'neon-green': '#39FF14'
+                    },
+                    animation: {
+                        'pulse-neon': 'pulse-neon 2s infinite',
+                        'glitch': 'glitch 0.3s infinite',
+                        'data-flow': 'data-flow 1s linear infinite'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes pulse-neon {
+            0%, 100% { box-shadow: 0 0 10px #5D5CDE, 0 0 20px #5D5CDE; }
+            50% { box-shadow: 0 0 20px #5D5CDE, 0 0 40px #5D5CDE; }
+        }
+        
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+        
+        @keyframes data-flow {
+            0% { transform: translateX(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+        }
+
+        .neural-grid {
+            background-image: 
+                linear-gradient(rgba(93,92,222,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(93,92,222,0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .selected-text {
+            background: rgba(93, 92, 222, 0.2);
+            border: 2px solid #5D5CDE;
+            animation: pulse-neon 2s infinite;
+        }
+
+        .pattern-cell {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .dark .pattern-cell {
+            border-color: #4b5563;
+        }
+        
+        .pattern-cell:hover {
+            border-color: #5D5CDE;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(93,92,222,0.5);
+        }
+        
+        .pattern-cell.active {
+            background: #5D5CDE;
+            border-color: #5D5CDE;
+            box-shadow: 0 0 15px rgba(93,92,222,0.8);
+        }
+        
+        .pattern-cell.kick.active { background: #dc2626; border-color: #dc2626; }
+        .pattern-cell.snare.active { background: #2563eb; border-color: #2563eb; }
+        .pattern-cell.hihat.active { background: #ca8a04; border-color: #ca8a04; }
+        .pattern-cell.lead.active { background: #9333ea; border-color: #9333ea; }
+        .pattern-cell.fx.active { background: #059669; border-color: #059669; }
+        
+        .pattern-cell.playing {
+            animation: glitch 0.2s ease-in-out;
+        }
+        
+        .pattern-cell.current-step {
+            box-shadow: 0 0 0 3px #f59e0b, 0 0 20px rgba(245,158,11,0.6);
+        }
+
+        .ai-popup {
+            backdrop-filter: blur(10px);
+            background: rgba(0,0,0,0.8);
+        }
+
+        .neural-connection {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #5D5CDE;
+            border-radius: 50%;
+            animation: data-flow 2s linear infinite;
+        }
+
+        .waveform {
+            height: 60px;
+            background: linear-gradient(45deg, rgba(93,92,222,0.1), rgba(147,51,234,0.1));
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .wave-bar {
+            position: absolute;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to top, #5D5CDE, #9333ea);
+            border-radius: 1px;
+            animation: wave-pulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes wave-pulse {
+            from { height: 10%; }
+            to { height: 90%; }
+        }
+
+        .holographic {
+            background: linear-gradient(45deg, transparent, rgba(93,92,222,0.1), transparent);
+            background-size: 200% 200%;
+            animation: holographic-shift 3s ease-in-out infinite;
+        }
+
+        @keyframes holographic-shift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+    </style>
+</head>
+<body class="bg-bg-light dark:bg-bg-dark text-gray-900 dark:text-gray-100 transition-colors duration-200 neural-grid">
+    <!-- AI Analysis Popup -->
+    <div id="ai-popup" class="fixed inset-0 ai-popup hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden border border-primary/30">
+            <!-- Popup Header -->
+            <div class="bg-gradient-to-r from-primary to-purple-600 p-6 relative overflow-hidden">
+                <div class="neural-connection" style="left: 10%; animation-delay: 0s;"></div>
+                <div class="neural-connection" style="left: 30%; animation-delay: 0.5s;"></div>
+                <div class="neural-connection" style="left: 50%; animation-delay: 1s;"></div>
+                <div class="neural-connection" style="left: 70%; animation-delay: 1.5s;"></div>
+                <div class="neural-connection" style="left: 90%; animation-delay: 2s;"></div>
+                
+                <div class="flex items-center justify-between relative z-10">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Neural Analysis Engine</h2>
+                        <p class="text-blue-100 mt-1">Literary-to-Musical Pattern Synthesis</p>
+                    </div>
+                    <button onclick="closeAIPopup()" class="text-white hover:text-blue-200 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Popup Content -->
+            <div class="p-6 max-h-96 overflow-y-auto">
+                <!-- OpenAI API Configuration -->
+                <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <h3 class="font-semibold mb-3 text-gray-800 dark:text-gray-200">AI Configuration</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">OpenAI API Key</label>
+                            <input type="password" id="api-key-input" placeholder="sk-..." 
+                                   class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm">
+                            <p class="text-xs text-gray-500 mt-1">Your API key is stored locally and never transmitted</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Model</label>
+                                <select id="model-select" class="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm">
+                                    <option value="gpt-4">GPT-4</option>
+                                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">Creativity</label>
+                                <select id="temperature-select" class="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm">
+                                    <option value="0.3">Conservative</option>
+                                    <option value="0.7" selected>Balanced</option>
+                                    <option value="1.0">Creative</option>
+                                    <option value="1.2">Experimental</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Text Display -->
+                <div id="popup-selected-text" class="mb-6">
+                    <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Selected Text</h3>
+                    <div id="popup-text-content" class="p-4 bg-gray-100 dark:bg-gray-700 rounded text-sm max-h-32 overflow-y-auto"></div>
+                </div>
+
+                <!-- Analysis Options -->
+                <div class="mb-6">
+                    <h3 class="font-semibold mb-3 text-gray-800 dark:text-gray-200">Analysis Focus</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="runAIAnalysis('emotional')" class="analysis-option p-3 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-700 transition-all">
+                            <div class="text-purple-800 dark:text-purple-200 font-medium text-sm">Emotional Core</div>
+                            <div class="text-purple-600 dark:text-purple-300 text-xs mt-1">Analyze emotional patterns</div>
+                        </button>
+                        
+                        <button onclick="runAIAnalysis('atmosphere')" class="analysis-option p-3 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-700 transition-all">
+                            <div class="text-green-800 dark:text-green-200 font-medium text-sm">Atmosphere</div>
+                            <div class="text-green-600 dark:text-green-300 text-xs mt-1">Sensory environment</div>
+                        </button>
+                        
+                        <button onclick="runAIAnalysis('rhythm')" class="analysis-option p-3 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-700 transition-all">
+                            <div class="text-orange-800 dark:text-orange-200 font-medium text-sm">Rhythmic Patterns</div>
+                            <div class="text-orange-600 dark:text-orange-300 text-xs mt-1">Syllable and tempo mapping</div>
+                        </button>
+                        
+                        <button onclick="runAIAnalysis('complete')" class="analysis-option p-3 bg-primary/10 dark:bg-primary/20 hover:bg-primary/20 dark:hover:bg-primary/30 rounded-lg border-2 border-primary/30 transition-all">
+                            <div class="text-primary font-bold text-sm">Complete Analysis</div>
+                            <div class="text-gray-600 dark:text-gray-300 text-xs mt-1">Full pattern generation</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Analysis Results -->
+                <div id="ai-analysis-results" class="hidden">
+                    <h3 class="font-semibold mb-3 text-gray-800 dark:text-gray-200">Analysis Results</h3>
+                    <div id="ai-analysis-content" class="p-4 bg-gray-50 dark:bg-gray-700 rounded text-sm"></div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="ai-loading" class="hidden text-center py-8">
+                    <div class="inline-flex items-center space-x-3">
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                        <span class="text-gray-600 dark:text-gray-400">AI analyzing text...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Popup Footer -->
+            <div class="bg-gray-50 dark:bg-gray-700 px-6 py-4 flex justify-end space-x-3">
+                <button onclick="closeAIPopup()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
+                    Cancel
+                </button>
+                <button onclick="applyAIResults()" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded transition-colors">
+                    Apply to Sequencer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 holographic">
+            <div class="max-w-7xl mx-auto px-4 py-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Eidolon Protocol</h1>
+                        <p class="text-gray-600 dark:text-gray-400 mt-2">Neural Literary-Musical Synthesis Engine</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <div class="text-sm text-gray-500">Audio Engine</div>
+                            <div id="audio-status" class="text-xs text-green-500">Initializing...</div>
+                        </div>
+                        <button onclick="initializeAudio()" id="init-audio-btn" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded transition-colors">
+                            Initialize Audio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-7xl mx-auto px-4 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Story Content Panel -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h2 class="text-xl font-semibold">Story Content</h2>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Select text passages to analyze</p>
+                        </div>
+                        
+                        <!-- Chapter Navigation -->
+                        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="showChapter('ch1')" class="chapter-btn px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-primary hover:text-white rounded transition-colors" data-chapter="ch1">Chapter 1</button>
+                                <button onclick="showChapter('ch2')" class="chapter-btn px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-primary hover:text-white rounded transition-colors" data-chapter="ch2">Chapter 2</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Story Text -->
+                        <div class="p-6">
+                            <div id="story-content" class="prose dark:prose-invert max-w-none">
+                                <!-- Chapter content will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="lg:col-span-1">
+                    <!-- Quick Analysis -->
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 sticky top-4 mb-6">
+                        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h2 class="text-xl font-semibold">Neural Analysis</h2>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">AI-powered text analysis</p>
+                        </div>
+                        
+                        <div class="p-6">
+                            <div id="selected-text-preview" class="hidden mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded text-xs max-h-24 overflow-y-auto"></div>
+                            
+                            <button onclick="openAIPopup()" class="w-full p-4 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white rounded-lg transition-all transform hover:scale-105">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <div class="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                                    <span class="font-bold">Launch AI Analysis</span>
+                                </div>
+                                <div class="text-xs mt-1 opacity-90">OpenAI-powered pattern generation</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Music Sequencer -->
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <div class="flex items-center justify-between">
+                                <h2 class="text-xl font-semibold">Audio Sequencer</h2>
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="playPattern()" id="play-btn" class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition-colors">
+                                        ▶ Play
+                                    </button>
+                                    <button onclick="clearPattern()" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded transition-colors">
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="p-6">
+                            <!-- Waveform Visualization -->
+                            <div class="mb-6">
+                                <div class="waveform" id="waveform-display">
+                                    <!-- Wave bars will be generated here -->
+                                </div>
+                                <div class="text-xs text-gray-500 text-center mt-2">Audio Visualization</div>
+                            </div>
+
+                            <!-- Pattern Grid -->
+                            <div class="mb-6 overflow-x-auto">
+                                <div class="grid grid-cols-17 gap-1 text-xs min-w-max">
+                                    <!-- Header row -->
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400 w-16"></div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">1</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">2</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">3</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">4</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">5</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">6</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">7</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">8</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">9</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">10</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">11</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">12</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">13</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">14</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">15</div>
+                                    <div class="text-center font-medium text-gray-600 dark:text-gray-400">16</div>
+
+                                    <!-- Kick Row -->
+                                    <div class="text-right font-medium text-red-600 dark:text-red-400 pr-2 w-16">Kick</div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="0"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="1"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="2"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="3"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="4"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="5"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="6"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="7"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="8"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="9"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="10"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="11"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="12"></div>
+                                    <div class="pattern-cell kick" data-step="13"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="14"></div>
+                                    <div class="pattern-cell kick" data-track="kick" data-step="15"></div>
+
+                                    <!-- Snare Row -->
+                                    <div class="text-right font-medium text-blue-600 dark:text-blue-400 pr-2 w-16">Snare</div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="0"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="1"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="2"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="3"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="4"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="5"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="6"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="7"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="8"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="9"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="10"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="11"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="12"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="13"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="14"></div>
+                                    <div class="pattern-cell snare" data-track="snare" data-step="15"></div>
+
+                                    <!-- Hi-Hat Row -->
+                                    <div class="text-right font-medium text-yellow-600 dark:text-yellow-400 pr-2 w-16">Hi-Hat</div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="0"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="1"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="2"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="3"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="4"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="5"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="6"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="7"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="8"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="9"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="10"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="11"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="12"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="13"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="14"></div>
+                                    <div class="pattern-cell hihat" data-track="hihat" data-step="15"></div>
+
+                                    <!-- Lead Row -->
+                                    <div class="text-right font-medium text-purple-600 dark:text-purple-400 pr-2 w-16">Lead</div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="0"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="1"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="2"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="3"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="4"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-step="5"></div>
+                                    <div class="pattern-cell lead" data-track="lead" data-
